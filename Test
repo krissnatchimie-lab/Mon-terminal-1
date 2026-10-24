@@ -1,0 +1,64 @@
+  }
+}
+
+// Lit une ligne CSV en gérant les guillemets
+function parseLine(line) {
+  const out = []; let cur = ''; let q = false;
+  for (const ch of line) {
+    if (ch === '"') q = !q;
+    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+function drawRates(c, list) {
+  c.innerHTML = '<input id="search" placeholder="Rechercher un pays..." oninput="filterRates()">' +
+    '<div id="list"></div>';
+  window.currentRates = list;
+  filterRates();
+}
+
+function filterRates() {
+  const q = (document.getElementById('search').value || '').toLowerCase();
+  const rows = window.currentRates.filter(r => r.country.toLowerCase().includes(q));
+  document.getElementById('list').innerHTML = rows.map(r =>
+    '<div class="card row"><div><b>' + r.country + '</b><br><small>Dernier point : ' + r.date + '</small></div>' +
+    '<div class="rate">' + r.value.toFixed(2) + ' %</div></div>'
+  ).join('') || '<div class="card">Aucun résultat.</div>';
+}
+
+function loadRates(c) {
+  if (ratesCache) { drawRates(c, ratesCache); return; }
+  c.innerHTML = '<div class="card">Chargement des taux de la BRI...</div>';
+
+  // Taux directeurs mensuels de toutes les banques centrales (BRI, gratuit, sans clé)
+  const url = 'https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/M..?lastNObservations=1&format=csv';
+
+  fetch(url)
+    .then(r => r.text())
+    .then(text => {
+      const lines = text.trim().split('\n');
+      const head = parseLine(lines[0]);
+      const iArea = head.indexOf('REF_AREA');
+      const iTime = head.indexOf('TIME_PERIOD');
+      const iVal = head.indexOf('OBS_VALUE');
+      const list = lines.slice(1).map(parseLine).map(f => ({
+        country: f[iArea].replace(/^[A-Z0-9]+: /, ''),
+        date: f[iTime],
+        value: parseFloat(f[iVal])
+      })).filter(r => !isNaN(r.value))
+        .sort((a, b) => a.country.localeCompare(b.country));
+      ratesCache = list;
+      drawRates(c, list);
+    })
+    .catch(() => {
+      c.innerHTML = '<div class="card">Impossible de charger les taux de la BRI. Vérifie ta connexion et réessaie.</div>';
+    });
+}
+
+show('cal');
+</script>
+</body>
+</html>
